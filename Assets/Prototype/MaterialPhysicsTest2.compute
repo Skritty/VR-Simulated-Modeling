@@ -1,0 +1,36 @@
+﻿// Each #kernel tells which function to compile; you can have many kernels
+#pragma kernel MaterialPhysics
+
+// Create a RenderTexture with enableRandomWrite flag and set it
+// with cs.SetTexture
+RWStructuredBuffer<float2> positionsOut;
+RWStructuredBuffer<float2> forcesOut;
+
+// Should use 2*4 + 2*4 + 2*4*2 + 8*4 = 64 bytes (good!)
+struct Node
+{
+    float2 position;
+    float2 force;
+    float2 limit[2];
+    uint nearby[8];
+};
+
+//for 3d node, 3*4 + 3*4 + 3*4*2 + 8*4 = 72 bytes, 8 bytes of padding -> 80 bytes
+struct threeDeeNode
+{
+    float3 position;
+    float3 force;
+    float3 limit[2];
+    uint nearby[8];
+};
+StructuredBuffer<Node> Nodes;
+
+[numthreads(8,8,1)]
+void MaterialPhysics(uint3 id : SV_DispatchThreadID)
+{
+    uint structs;
+    uint stride;
+    Nodes.GetDimensions(structs, stride);
+    
+    
+}

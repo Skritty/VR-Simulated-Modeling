@@ -1,0 +1,58 @@
+﻿// Each #kernel tells which function to compile; you can have many kernels
+#pragma kernel MaterialPhysics
+
+RWStructuredBuffer<float2> positionsOut;
+RWStructuredBuffer<float2> forcesOut;
+
+StructuredBuffer<float2> positionsIn;
+StructuredBuffer<float2> forcesIn;
+
+float4 lockedBounds;
+
+uint gridDim;
+float2 bondRange;
+
+[numthreads(8, 8, 1)]
+void MaterialPhysics(uint3 id : SV_DispatchThreadID)
+{
+    uint structs;
+    uint stride;
+    positionsIn.GetDimensions(structs, stride);
+    
+    if (!any(forcesIn[id.x + id.y * (gridDim - 1)]))
+    {
+        return;
+    }
+    
+    float2 currentPos = positionsIn[id.x + id.y * (gridDim-1)];
+    positionsOut[id.x + id.y * (gridDim - 1)] = currentPos + forcesIn[id.x + id.y * (gridDim-1)];
+    forcesOut[id.x + id.y * (gridDim-1)] = float2(0, 0);
+    
+    for (int x = -1; x <= 1; x++)
+    {
+        for (int y = -1; y <= 1; y++)
+        {
+            if ((x == 0 && y == 0) || id.x + x < 0 || id.x + x >= gridDim || id.y + y < 0 || id.y + y >= gridDim) 
+                continue;
+            
+            float2 connectedPos = positionsIn[id.x + x + (id.y + y) * (gridDim - 1)];
+            float2 connectedForce = forcesIn[id.x + x + (id.y + y) * (gridDim - 1)];
+            
+            if (!any(connectedPos) || !any(currentPos))
+                continue;
+            
+            // Find the distance vector between this node and the new position of the current node
+            float2 newDistance =  currentPos - connectedPos;
+            float dist = length(newDistance);
+
+            // If it is still within acceptable range, do nothing
+            if (dist <= bondRange.y && dist >= bondRange.x)
+                continue;
+
+            // Find how much the node needs to be moved to get back into acceptable range
+            float2 force = newDistance - normalize(newDistance) * (dist < bondRange.x ? bondRange.x : bondRange.y);
+            forcesOut[id.x + x + (id.y + y) * (gridDim - 1)] += force/8;
+
+        }
+    }
+}
