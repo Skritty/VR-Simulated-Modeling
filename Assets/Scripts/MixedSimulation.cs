@@ -1,6 +1,7 @@
 ﻿using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using System.Linq;
 
 public class MixedSimulation : MonoBehaviour
 {
@@ -17,10 +18,16 @@ public class MixedSimulation : MonoBehaviour
         public Vector3 correctedDisplacement; // The distance that will be moved
         public Vector3 relUp = Vector3.up; // The relative up vector, make sure to change this as a node moves
         public List<Node> nearby = new List<Node>();
+        public List<Node> nearbyForMesh = new List<Node>();
+        public List<Node> nearbySurface = new List<Node>();
+        public List<Node> nearbySurfaceForMesh = new List<Node>();
+        public int surfaceIndex;
         public Vector3 normal = Vector3.zero;
         public int normalCount = 0;
         //public Vector3 normalSum = Vector3.zero;
         public bool queued = false;
+        public int triangles = 0;
+        public bool edgesRendered = false;
 
         public Node(Vector3 p, float m, int i)
         {
@@ -30,6 +37,53 @@ public class MixedSimulation : MonoBehaviour
             index = i;
         }
     }
+
+    public class Tri
+    {
+        public List<Tri> nextTo = new List<Tri>();
+        public int i1;
+        public int i2;
+        public int i3;
+        public Tri(int _i1, int _i2, int _i3)
+        {
+            i1 = _i1;
+            i2 = _i2;
+            i3 = _i3;
+        }
+        public bool Contains(int _i1, int _i2, int _i3)
+        {
+            if (!(i1 == _i1 || i1 == _i2 || i1 == _i3)) return false;
+            if (!(i2 == _i1 || i2 == _i2 || i2 == _i3)) return false;
+            if (!(i3 == _i1 || i3 == _i2 || i3 == _i3)) return false;
+            return true;
+        }
+        public override string ToString()
+        {
+            return "i1:" + i1 + ", i2:" + i2 + ", i3:" + i3;
+        }
+    }
+
+    public class Edge
+    {
+        public int i1;
+        public int i2;
+        public int amt;
+        public Edge(int _i1, int _i2)
+        {
+            i1 = _i1;
+            i2 = _i2;
+            amt = 1;
+        }
+        public bool Contains(int _i1, int _i2)
+        {
+            if (!(i1 == _i1 || i1 == _i2)) return false;
+            if (!(i2 == _i1 || i2 == _i2)) return false;
+            return true;
+        }
+    }
+
+    Vector3 np1;
+    Vector3 np2;
 
     public enum StretchType { Rigid, Exponential, Hyperbolic }
     public enum CompressionType { Rigid, AdvancedRigid }
@@ -66,14 +120,28 @@ public class MixedSimulation : MonoBehaviour
     [Range(1, 90)]
     public float angleOfTransfer = 50f;
 
+    [Header("Gizmo Settings")]
+    [SerializeField] bool DrawAllNodes;
+    [SerializeField] bool DrawSurfaceNodes;
+    [SerializeField] bool DrawEdgeMesh;
+
     Queue<Node> normalQueue = new Queue<Node>(); // Add forces to this
+    public List<Node> surfaceNodes = new List<Node>();
+    Mesh mesh;
+    Vector3[] vertices;
+    int[] triangles;
+    List<Tri> tempTri = new List<Tri>();
+    List<Edge> edgeCount = new List<Edge>();
 
     private void Start()
     {
         surfaces = GameObject.FindObjectsOfType<StaticSurface>();
+        mesh = new Mesh();
+        GetComponent<MeshFilter>().mesh = mesh;
         Generate();
         GenerateInternalConstraints();
         GenerateExternalConstraints();
+        GenerateMesh();
     }
 
     /// <summary>
@@ -110,7 +178,6 @@ public class MixedSimulation : MonoBehaviour
                     int index = x + dim * (y + dim * z);
                     Node n = nodes[index];
 
-                    //
                     #region constraints using nearby nodes
                     for (int i = -1; i <= 1; i++)
                     {
@@ -124,14 +191,22 @@ public class MixedSimulation : MonoBehaviour
                                 int nearIndex = (x + i) + dim * ((y + j) + dim * (z + k));
                                 Node nearby = nodes[nearIndex];
                                 n.nearby.Add(nearby);
+                                if((i != 0 && (j == 0 && k == 0)) || (j != 0 && (i == 0 && k == 0)) || (k != 0 && (j == 0 && i == 0)))
+                                {
+                                    n.nearbyForMesh.Add(nearby);
+                                }
 
                                 internalConstraints.Add(new StretchConstraint(this, index, nearIndex));
                                 internalConstraints.Add(new CompressionConstraint(this, index, nearIndex));
                                 internalConstraints.Add(new BendingConstraint(this, index, nearIndex));
-                                //internalConstraints.Add(new TestConstraint(this, index));
 
                             }
                         }
+                    }
+                    if (n.nearby.Count < 26)
+                    {
+                        surfaceNodes.Add(n);
+                        n.surfaceIndex = surfaceNodes.Count - 1;
                     }
                     #endregion
                 }
@@ -139,11 +214,90 @@ public class MixedSimulation : MonoBehaviour
         }
     }
 
+    private void GenerateMesh()
+    {
+        int i = 0;
+        vertices = new Vector3[surfaceNodes.Count];
+        tempTri = new List<Tri>();
+        edgeCount = new List<Edge>();
+
+        // Find all surface neighbors and rebuild vertices array
+        foreach (Node n in surfaceNodes)
+        {
+            vertices[i] = n.position;
+            n.nearbySurface.Clear();
+            n.nearbySurface.AddRange(n.nearby.Intersect(surfaceNodes));
+            n.nearbySurfaceForMesh.AddRange(n.nearbyForMesh.Intersect(surfaceNodes));
+            i++;
+        }
+
+        // Choose the first edge
+        Node n1 = surfaceNodes[0];
+        Node n2 = n1.nearbySurface[0];
+        GenerateMesh(n2, n1);
+
+        //Debug.Log(why);
+        triangles = new int[tempTri.Count*3];
+        for(int x = 0; x < tempTri.Count; x++)
+        {
+            triangles[x*3] = tempTri[x].i1;
+            triangles[x*3+1] = tempTri[x].i2;
+            triangles[x*3+2] = tempTri[x].i3;
+        }
+    }
+
+    private void GenerateMesh(Node n1, Node n2)
+    {
+        // n1 and n2 make up an edge that is used to determine a tirangle with orientation similar to the other tri the edge connects to
+        // If this edge is already part of 2 triangles, do not make another tri
+        Edge edge1 = edgeCount.Find(e => e.Contains(n1.surfaceIndex, n2.surfaceIndex));
+        if (edge1 != null && edge1.amt > 2) return;
+        
+        // Make a triangle for each valid spot
+        foreach (Node n3 in n2.nearbySurface.Intersect(n1.nearbySurfaceForMesh))
+        {
+            if (!tempTri.Exists(t => t.Contains(n1.surfaceIndex, n2.surfaceIndex, n3.surfaceIndex)))
+            {
+                Tri tri = new Tri(n1.surfaceIndex, n2.surfaceIndex, n3.surfaceIndex);
+                tempTri.Add(tri);
+
+                // Update edge count
+                Edge edge2 = edgeCount.Find(e => e.Contains(n2.surfaceIndex, n3.surfaceIndex));
+                Edge edge3 = edgeCount.Find(e => e.Contains(n3.surfaceIndex, n1.surfaceIndex));
+                if (edge1 == null) edgeCount.Add(edge1 = new Edge(n1.surfaceIndex, n2.surfaceIndex));
+                if (edge2 == null) edgeCount.Add(edge2 = new Edge(n2.surfaceIndex, n3.surfaceIndex));
+                if (edge3 == null) edgeCount.Add(edge3 = new Edge(n3.surfaceIndex, n1.surfaceIndex));
+                edge1.amt++;
+                edge2.amt++;
+                edge3.amt++;
+
+                //GenerateMesh(n1, n2);
+                GenerateMesh(n3, n2);
+                GenerateMesh(n1, n3);
+            }
+        }
+    }
+
     private void FixedUpdate()
     {
+        UpdateMesh();
         ResetNodes();
         PropagateQueuedForces();
         Simulate();
+    }
+
+    void UpdateMesh()
+    {
+        int i = 0;
+        foreach(Node n in surfaceNodes)
+        {
+            vertices[i] = n.position - transform.position;
+            i++;
+        }
+        mesh.Clear();
+        mesh.vertices = vertices;
+        mesh.triangles = triangles;
+        mesh.RecalculateNormals();
     }
 
     private void ResetNodes()
@@ -186,10 +340,6 @@ public class MixedSimulation : MonoBehaviour
         {
             n.velocity = (n.predictedPosition - n.position) / Time.fixedDeltaTime;
             n.position = n.predictedPosition;
-        }
-        foreach (StaticSurface s in surfaces)
-        {
-            s.previousPos = s.transform.position;
         }
         /*foreach (Constraint c in internalConstraints)
         {
@@ -275,14 +425,48 @@ public class MixedSimulation : MonoBehaviour
         }
     }
 
+    public Node ClosestPointToRay(Ray ray, float threshold)
+    {
+        Node closest = null;
+        float closestDist = threshold;
+        float closestOrigin = Mathf.Infinity;
+        foreach(Node n in surfaceNodes)
+        {
+            float distToRay = Vector3.Distance(Vector3.Project(n.position - ray.origin, ray.direction) + ray.origin, n.position);
+            float distToOrigin = Vector3.Distance(n.position, ray.origin);
+            if (distToRay < threshold && distToOrigin < closestOrigin)
+            {
+                closestOrigin = distToOrigin;
+                closest = n;
+            }
+        }
+        return closest;
+    }
+
     private void OnDrawGizmos()
     {
         if (nodes == null) return;
-        Vector3 prev = nodes[0].position;
+        Gizmos.color = Color.white;
         foreach (Node n in nodes)
         {
-            Gizmos.DrawWireSphere(n.position, distBetween / 2);
-            prev = n.position;
+            if (DrawAllNodes)
+            {
+                Gizmos.DrawWireSphere(n.position, distBetween / 10);
+            }
+        }
+        foreach(Node n in surfaceNodes)
+        {
+            if(DrawSurfaceNodes && !DrawAllNodes)
+            {
+                Gizmos.DrawWireSphere(n.position, distBetween / 10);
+            }
+            if (DrawEdgeMesh && vertices?.Length > 0)
+            {
+                foreach(Node ns in n.nearbySurfaceForMesh)
+                {
+                    Gizmos.DrawLine(n.position, ns.position);
+                }
+            }
         }
     }
 
