@@ -7,6 +7,7 @@ public class CompressionConstraint : Constraint
     private int index1;
     private int index2;
     private float initialDist;
+    private float currentSetDist;
     private Vector3 prevPos;
 
     public CompressionConstraint(MixedSimulation material, int i1, int i2) : base(material)
@@ -14,6 +15,7 @@ public class CompressionConstraint : Constraint
         index1 = i1;
         index2 = i2;
         initialDist = Vector3.Distance(material.nodes[i1].position, material.nodes[i2].position);
+        currentSetDist = initialDist;
         prevPos = material.nodes[i1].position;
     }
 
@@ -29,9 +31,17 @@ public class CompressionConstraint : Constraint
         switch (material.compressionType)
         {
             case MixedSimulation.CompressionType.Rigid:
-                //n1.correctedDisplacement -= Vector3.Project(n1.correctedDisplacement, dir) * (material.stiffness);
-                n1.correctedDisplacement -= dir * (dist - initialDist) / n1.nearby.Count;
-                n1.predictedPosition += n1.correctedDisplacement * material.stiffness;
+                //n1.correctedDisplacement -= Vector3.Project(n1.correctedDisplacement, dir) * (material.stiffness); -1 = 0 pli, 1 = 1 pli y = pli, x = dist
+                float pAmt = material.pliability * 2 - 1;
+                float pDist = initialDist - dist;
+                //Vector3 expectedMove = dir * (dist - initialDist) * ((pAmt * pAmt) - pAmt + (2*pDist*(1-pAmt*pAmt)))/2 * di + storedMovement;
+                //currentSetDist += (initialDist - currentSetDist)*(material.stiffness/material.iterationsToRestore * di * Time.fixedDeltaTime);
+                Vector3 expectedMove = dir * (dist - currentSetDist) * di * (1 - material.pliability) + storedMovement;
+                //storedMovement = expectedMove * material.pliability;
+                //currentSetDist = currentSetDist - expectedMove.magnitude * material.pliability * di;
+                n1.correctedDisplacement -= expectedMove;// * (1 - material.pliability);
+                //n1.predictedPosition += n1.correctedDisplacement * material.stiffness;
+                
                 break;
 
             case MixedSimulation.CompressionType.AdvancedRigid:

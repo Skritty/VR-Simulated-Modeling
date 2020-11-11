@@ -30,7 +30,9 @@ public class BendingConstraint : Constraint
         MixedSimulation.Node n2 = material.nodes[index2];
 
         Vector3 currentDir = n1.predictedPosition - n2.predictedPosition;
-        n1.correctedDisplacement += (Vector3.RotateTowards(currentDir, initialDir, Vector3.Angle(currentDir, initialDir) * Mathf.Deg2Rad, 0) + n2.predictedPosition - n1.predictedPosition) / n1.nearby.Count;
+        Vector3 expectedMove = (Vector3.RotateTowards(currentDir, initialDir, Vector3.Angle(currentDir, initialDir) * Mathf.Deg2Rad, 0) + n2.predictedPosition - n1.predictedPosition) / n1.nearby.Count;// + storedMovement;
+        n1.correctedDisplacement += expectedMove;// * (1 - material.pliability);
+        storedMovement = expectedMove;// * material.pliability;
     }
     public override void UpdateInitial()
     {

@@ -13,6 +13,7 @@ public class MixedSimulation : MonoBehaviour
         public Vector3 externalForces; // Gathered from outside sources, such as the player and gravity
         public float mass; // Should be irrelivant if all particles have the same mass
         public float inverseMass; // 1/mass for efficiency
+        public Vector3 initialPredictedPos;
         public Vector3 predictedPosition; // Where the particle will move to
         public Vector3 prevPredicted;
         public Vector3 correctedDisplacement; // The distance that will be moved
@@ -74,11 +75,11 @@ public class MixedSimulation : MonoBehaviour
             i2 = _i2;
             amt = 1;
         }
-        public bool Contains(int _i1, int _i2)
+        public int Contains(int _i1, int _i2)
         {
-            if (!(i1 == _i1 || i1 == _i2)) return false;
-            if (!(i2 == _i1 || i2 == _i2)) return false;
-            return true;
+            if (!(i1 == _i1 || i1 == _i2)) return 0;
+            if (!(i2 == _i1 || i2 == _i2)) return 0;
+            return amt;
         }
     }
 
@@ -102,6 +103,7 @@ public class MixedSimulation : MonoBehaviour
     [Range(0, 1)]
     [Tooltip("Stiffness")]
     public float stiffness = .5f;
+    public int iterationsToRestore = 8;
     [Range(0,1)]
     public float bounciness = .5f;
     [Range(0, 1)]
@@ -231,45 +233,81 @@ public class MixedSimulation : MonoBehaviour
             i++;
         }
 
-        // Choose the first edge
+        // Choose the tri
         Node n1 = surfaceNodes[0];
         Node n2 = n1.nearbySurface[0];
-        GenerateMesh(n2, n1);
+        Node n3 = n1.nearbySurfaceForMesh[1];
+        edgeCount.Add(new Edge(n1.surfaceIndex, n2.surfaceIndex));
+        edgeCount.Add(new Edge(n2.surfaceIndex, n3.surfaceIndex));
+        edgeCount.Add(new Edge(n3.surfaceIndex, n1.surfaceIndex));
+        Tri tri = new Tri(n1.surfaceIndex, n2.surfaceIndex, n3.surfaceIndex);
+        tempTri.Add(tri);
+        GenerateMesh(n3, n2);
 
         //Debug.Log(why);
+        List<Vector3> flatVerts = new List<Vector3>();
         triangles = new int[tempTri.Count*3];
         for(int x = 0; x < tempTri.Count; x++)
         {
-            triangles[x*3] = tempTri[x].i1;
-            triangles[x*3+1] = tempTri[x].i2;
-            triangles[x*3+2] = tempTri[x].i3;
+            flatVerts.Add(vertices[tempTri[x].i1]);
+            triangles[x*3] = flatVerts.Count - 1;
+            flatVerts.Add(vertices[tempTri[x].i2]);
+            triangles[x*3+1] = flatVerts.Count - 1;
+            flatVerts.Add(vertices[tempTri[x].i3]);
+            triangles[x*3+2] = flatVerts.Count - 1;
         }
+        //vertices = flatVerts.ToArray();
     }
 
     private void GenerateMesh(Node n1, Node n2)
     {
         // n1 and n2 make up an edge that is used to determine a tirangle with orientation similar to the other tri the edge connects to
         // If this edge is already part of 2 triangles, do not make another tri
-        Edge edge1 = edgeCount.Find(e => e.Contains(n1.surfaceIndex, n2.surfaceIndex));
-        if (edge1 != null && edge1.amt > 2) return;
+        Edge edge1 = edgeCount.Find(e => e.Contains(n1.surfaceIndex, n2.surfaceIndex) > 0);
+        if (edge1 == null) edgeCount.Add(edge1 = new Edge(n1.surfaceIndex, n2.surfaceIndex));
+        if (edge1.amt == 2) return;
+        else edge1.amt++;
         
         // Make a triangle for each valid spot
-        foreach (Node n3 in n2.nearbySurface.Intersect(n1.nearbySurfaceForMesh))
+        foreach (Node n3 in n2.nearbySurfaceForMesh.Intersect(n1.nearbySurface))
         {
+            // to avoid inside tris, if 1 && 3 share a nearbyMeshSurface node that isnt 2
+            // to avoid more than 2 tris in a square, if 1 && 3 share one that isnt 1 cancel
+            // h1 and h2 make up the largest edge and n3 will always be h2 if possible
+            Node h1 = n1;
+            Node h2 = n2;
+            Node h3 = n3;
+            float d12 = Vector3.Distance(n1.position, n2.position);
+            float d23 = Vector3.Distance(n2.position, n3.position);
+            float d31 = Vector3.Distance(n3.position, n1.position);
+            if (d23 >= d12 && d23 >= d31)
+            {
+                h1 = n2;
+                h2 = n3;
+                h3 = n1;
+            }
+            if (d31 >= d23 && d31 >= d12)
+            {
+                h1 = n1;
+                h2 = n3;
+                h3 = n2;
+            }
+            
+            if (h1.nearbySurfaceForMesh.Intersect(h2.nearbySurfaceForMesh).Count() < 2) continue;
+            List<Node> intersects = h1.nearbySurfaceForMesh.Intersect(h2.nearbySurfaceForMesh).ToList();
+            if (tempTri.Exists(t => t.Contains(h1.surfaceIndex, intersects[0].surfaceIndex, intersects[1].surfaceIndex) || t.Contains(h2.surfaceIndex, intersects[0].surfaceIndex, intersects[1].surfaceIndex))) continue;
             if (!tempTri.Exists(t => t.Contains(n1.surfaceIndex, n2.surfaceIndex, n3.surfaceIndex)))
             {
+                // Update edge count
+                Edge edge2 = edgeCount.Find(e => e.Contains(n2.surfaceIndex, n3.surfaceIndex) > 0);
+                Edge edge3 = edgeCount.Find(e => e.Contains(n3.surfaceIndex, n1.surfaceIndex) > 0);
+                if (edge2 == null) edgeCount.Add(edge2 = new Edge(n2.surfaceIndex, n3.surfaceIndex));
+                else edge2.amt++;
+                if (edge3 == null) edgeCount.Add(edge3 = new Edge(n3.surfaceIndex, n1.surfaceIndex));
+                else edge3.amt++;
+
                 Tri tri = new Tri(n1.surfaceIndex, n2.surfaceIndex, n3.surfaceIndex);
                 tempTri.Add(tri);
-
-                // Update edge count
-                Edge edge2 = edgeCount.Find(e => e.Contains(n2.surfaceIndex, n3.surfaceIndex));
-                Edge edge3 = edgeCount.Find(e => e.Contains(n3.surfaceIndex, n1.surfaceIndex));
-                if (edge1 == null) edgeCount.Add(edge1 = new Edge(n1.surfaceIndex, n2.surfaceIndex));
-                if (edge2 == null) edgeCount.Add(edge2 = new Edge(n2.surfaceIndex, n3.surfaceIndex));
-                if (edge3 == null) edgeCount.Add(edge3 = new Edge(n3.surfaceIndex, n1.surfaceIndex));
-                edge1.amt++;
-                edge2.amt++;
-                edge3.amt++;
 
                 //GenerateMesh(n1, n2);
                 GenerateMesh(n3, n2);
@@ -284,6 +322,7 @@ public class MixedSimulation : MonoBehaviour
         ResetNodes();
         PropagateQueuedForces();
         Simulate();
+        Debug.Log(VolumeOfMesh(mesh));
     }
 
     void UpdateMesh()
@@ -294,8 +333,16 @@ public class MixedSimulation : MonoBehaviour
             vertices[i] = n.position - transform.position;
             i++;
         }
+        List<Vector3> flatVerts = new List<Vector3>();
+        for (int x = 0; x < tempTri.Count; x++)
+        {
+            flatVerts.Add(vertices[tempTri[x].i1]);
+            flatVerts.Add(vertices[tempTri[x].i2]);
+            flatVerts.Add(vertices[tempTri[x].i3]);
+        }
+        //vertices = flatVerts.ToArray();
         mesh.Clear();
-        mesh.vertices = vertices;
+        mesh.vertices = flatVerts.ToArray();
         mesh.triangles = triangles;
         mesh.RecalculateNormals();
     }
@@ -322,7 +369,8 @@ public class MixedSimulation : MonoBehaviour
                 n.normal /= n.normalCount;
             n.correctedDisplacement += Time.fixedDeltaTime * n.normal / iterations;
             n.velocity += Time.fixedDeltaTime * n.inverseMass * n.externalForces;
-            n.predictedPosition = n.position + Time.fixedDeltaTime * n.velocity;
+            n.initialPredictedPos = n.predictedPosition = n.position + Time.fixedDeltaTime * n.velocity;
+            n.velocity = Vector3.zero;
             n.prevPredicted = n.position;
             n.normalCount = 0;
             n.normal = Vector3.zero;
@@ -334,11 +382,14 @@ public class MixedSimulation : MonoBehaviour
         {
             ProjectConstraints(1f / iterations);
         }
-
+        foreach (Constraint c in externalConstraints)
+        {
+            c.ConstrainPositions(0f);
+        }
         // Update the real velocity and positions
         foreach (Node n in nodes)
         {
-            n.velocity = (n.predictedPosition - n.position) / Time.fixedDeltaTime;
+            n.velocity += (n.predictedPosition - n.position) / Time.fixedDeltaTime;
             n.position = n.predictedPosition;
         }
         /*foreach (Constraint c in internalConstraints)
@@ -366,19 +417,13 @@ public class MixedSimulation : MonoBehaviour
     /// </summary>
     private void ProjectConstraints(float di)
     {
-        //int why = 0;
         foreach (Constraint c in internalConstraints)
-        {
-            c.ConstrainPositions(di);//why++;
-        }
-        foreach (Constraint c in externalConstraints)
         {
             c.ConstrainPositions(di);
         }
-        //Debug.Log(why);
+        
         foreach (Node n in nodes)
         {
-            n.prevPredicted = n.predictedPosition;
             n.predictedPosition += n.correctedDisplacement * di;
             n.correctedDisplacement = Time.fixedDeltaTime * n.normal * di;
         }
@@ -443,6 +488,19 @@ public class MixedSimulation : MonoBehaviour
         return closest;
     }
 
+    public static float SignedVolumeOfTriangle(Vector3 p1, Vector3 p2, Vector3 p3)
+    {
+        return Vector3.Dot(p1, Vector3.Cross(p2,p3)) / 6.0f;
+    }
+
+    public float VolumeOfMesh(Mesh mesh)
+    {
+        float sum = 0;
+        int i = 0;
+        sum += SignedVolumeOfTriangle(mesh.vertices[mesh.triangles[i++]], mesh.vertices[mesh.triangles[i++]], mesh.vertices[mesh.triangles[i++]]);
+        return Mathf.Abs(sum);
+    }
+
     private void OnDrawGizmos()
     {
         if (nodes == null) return;
@@ -462,10 +520,14 @@ public class MixedSimulation : MonoBehaviour
             }
             if (DrawEdgeMesh && vertices?.Length > 0)
             {
-                foreach(Node ns in n.nearbySurfaceForMesh)
+                foreach(Edge e in edgeCount)
+                {
+                    Gizmos.DrawLine(surfaceNodes[e.i1].position, surfaceNodes[e.i2].position);
+                }
+                /*foreach(Node ns in n.nearbySurfaceForMesh)
                 {
                     Gizmos.DrawLine(n.position, ns.position);
-                }
+                }*/
             }
         }
     }

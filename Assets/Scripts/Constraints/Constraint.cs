@@ -5,6 +5,7 @@ using UnityEngine;
 public abstract class Constraint
 {
     protected MixedSimulation material;
+    protected Vector3 storedMovement = Vector3.zero;
     public Constraint(MixedSimulation m)
     {
         material = m;

@@ -30,7 +30,9 @@ public class StretchConstraint : Constraint
         switch (material.stretchType)
         {
             case MixedSimulation.StretchType.Rigid:
-                n1.correctedDisplacement -= dir * (dist - initialDist)/n1.nearby.Count;
+                Vector3 expectedMove = dir * (dist - initialDist)/n1.nearby.Count + storedMovement;
+                n1.correctedDisplacement -= expectedMove * material.stiffness;
+                //storedMovement = expectedMove * (1 - material.stiffness);
                 break;
 
             case MixedSimulation.StretchType.Exponential:
