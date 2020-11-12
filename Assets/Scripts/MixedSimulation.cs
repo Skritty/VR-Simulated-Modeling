@@ -322,7 +322,7 @@ public class MixedSimulation : MonoBehaviour
         ResetNodes();
         PropagateQueuedForces();
         Simulate();
-        Debug.Log(VolumeOfMesh(mesh));
+        //Debug.Log(VolumeOfMesh(mesh));
     }
 
     void UpdateMesh()

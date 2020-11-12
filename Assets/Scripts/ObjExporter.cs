@@ -47,7 +47,12 @@ public class ObjExporter
 
     public static void MeshToFile(MeshFilter mf, string filename)
     {
-        using (StreamWriter sw = new StreamWriter(filename))
+        string filepath = Application.dataPath + "/Models";
+        if (!Directory.Exists(filepath))
+            Directory.CreateDirectory(filepath);
+        filepath += "/" + filename + ".obj";
+        Debug.Log("Model saved to " + filepath);
+        using (StreamWriter sw = new StreamWriter(filepath))
         {
             sw.Write(MeshToString(mf));
         }
