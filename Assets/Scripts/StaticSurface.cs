@@ -11,11 +11,18 @@ public class StaticSurface : MonoBehaviour
     private float friction = 0;
     [SerializeField]
     [Range(0,1)]
-    private float bounciness;
+    private float bounciness = 0;
     [SerializeField]
     private bool _static = false;
     public Vector3 deltaDist;
     private Vector3 previousPos;
+
+    public void SetStats(float _friction, float _bounciness, bool isStatic)
+    {
+        friction = _friction;
+        bounciness = _bounciness;
+        _static = isStatic;
+    }
 
     private void Awake()
     {

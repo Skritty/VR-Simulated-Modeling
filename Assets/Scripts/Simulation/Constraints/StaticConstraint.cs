@@ -7,7 +7,7 @@ using UnityEngine;
 /// </summary>
 public class StaticConstraint : Constraint
 {
-    private int index;
+    private Node n;
     private float friction;
     private bool trueStatic = false;
     private StaticSurface obj;
@@ -18,7 +18,7 @@ public class StaticConstraint : Constraint
 
     public StaticConstraint(MixedSimulation material, int _index, float _friction, bool _static, StaticSurface _obj, float bounce) : base(material)
     {
-        index = _index;
+        n = material.nodes[_index];
         friction = _friction;
         trueStatic = _static;
         obj = _obj;
@@ -30,7 +30,6 @@ public class StaticConstraint : Constraint
 
     public override void ConstrainPositions(float di)
     {
-        MixedSimulation.Node n = material.nodes[index];
         Vector3 normal = Vector3.zero;
 
         if (sCollider != null)
@@ -71,16 +70,16 @@ public class StaticConstraint : Constraint
         if (rb != null)
         {
             material.AddForce(n, (-n.externalForces * (material.bounciness + bounciness) / 2 + surfaceVertical) * rb.mass / n.mass);
-            material.nodes[index].correctedDisplacement = (toMove * (material.bounciness + bounciness) / 2 + surfaceVertical) * rb.mass / n.mass;
+            n.correctedDisplacement = (toMove * (material.bounciness + bounciness) / 2 + surfaceVertical) * rb.mass / n.mass;
             rb.velocity += (-n.externalForces * (material.bounciness + bounciness) / 2 - surfaceVertical) * n.mass / rb.mass;
         }
         else
         {
-            material.AddForce(n, (-n.externalForces * (material.bounciness + bounciness) / 2 + surfaceVertical));
-            material.nodes[index].correctedDisplacement = toMove * (material.bounciness + bounciness) / 2 + surfaceVertical;
+            material.AddForce(n, (-n.externalForces * (material.bounciness + bounciness) + surfaceVertical));
+            n.correctedDisplacement = toMove * (material.bounciness + bounciness) / 2 + surfaceVertical;
         }
-        surfaceHorizontal = surfaceHorizontal.normalized * Mathf.Clamp(Vector3.Project(n.externalForces, normal).magnitude * friction - surfaceHorizontal.magnitude, 0, surfaceHorizontal.magnitude);
-        n.predictedPosition = n.position + surfaceVertical + surfaceHorizontal;
+        //surfaceHorizontal = surfaceHorizontal * friction;//Mathf.Clamp(Vector3.Project(n.externalForces, normal).magnitude * friction - surfaceHorizontal.magnitude, 0, surfaceHorizontal.magnitude);
+        n.predictedPosition = n.position + surfaceVertical + surfaceHorizontal * friction;
     }
 
     private bool PointInBox(Vector3 pos, BoxCollider b)
