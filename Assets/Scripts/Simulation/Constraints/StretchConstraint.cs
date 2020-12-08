@@ -28,8 +28,14 @@ public class StretchConstraint : Constraint
         Vector3 expectedMove = dir * (dist - initialDist);
         n1.correctedDisplacement -= expectedMove / n1.nearby.Count;
     }
+
     public override void UpdateInitial()
     {
         initialDist = Vector3.Distance(n1.position, n2.position);
+    }
+
+    public override void Reset()
+    {
+
     }
 }

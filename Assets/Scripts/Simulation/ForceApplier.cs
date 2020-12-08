@@ -9,8 +9,13 @@ public class ForceApplier : MonoBehaviour
     [SerializeField] float maximumRange = 1;
     [SerializeField] float falloff;
     [SerializeField] float forceMagnitude = 10f;
+    [SerializeField] float scrollSpeed = 0.2f;
+    [SerializeField] float scrollScale = 0.1f;
+    [SerializeField] Material tool;
+    [SerializeField] Material toolSelected;
 
     Vector3 currentPos = Vector3.zero;
+    Vector3 initialOffset = Vector3.zero;
     Vector3 selectedPoint = Vector3.zero;
     Node selectedNode = null;
     Transform selectedObject = null;
@@ -19,22 +24,23 @@ public class ForceApplier : MonoBehaviour
     private void Update()
     {
         if (Input.GetKeyDown(KeyCode.Escape)) Application.Quit();
-    }
-
-    private void FixedUpdate()
-    {
         if (Input.GetMouseButtonDown(0))
         {
             RaycastHit hit;
             Ray ray = Camera.main.ScreenPointToRay(Input.mousePosition);
-            if (Physics.Raycast(ray, out hit))
+            Physics.Raycast(ray, out hit);
+            if (hit.transform != null && hit.transform.tag == "Moveable" && selectedObject == null)
             {
-                if(hit.transform.tag == "Moveable")
-                {
-                    selectedObject = hit.transform;
-                    initialDistFromCamera = Vector3.Project(selectedObject.position - Camera.main.transform.position, Camera.main.transform.forward).magnitude;
-                }
-                
+                if (selectedObject != null) selectedObject.GetComponent<Renderer>().sharedMaterial = tool;
+                selectedObject = hit.transform;
+                initialOffset = selectedObject.transform.position - hit.point;
+                initialDistFromCamera = Vector3.Project(selectedObject.position - initialOffset - Camera.main.transform.position, Camera.main.transform.forward).magnitude;
+                selectedObject.GetComponent<Renderer>().sharedMaterial = toolSelected;
+            }
+            else
+            {
+                if (selectedObject != null) selectedObject.GetComponent<Renderer>().sharedMaterial = tool;
+                selectedObject = null;
             }
 
             Node node = simulation.ClosestPointToRay(ray, simulation.distBetween);
@@ -46,22 +52,39 @@ public class ForceApplier : MonoBehaviour
             }
         }
 
+        if (Input.GetKey(KeyCode.LeftControl))
+        {
+            if (Input.mouseScrollDelta.magnitude > 0)
+            {
+                if (selectedObject != null)
+                {
+                    selectedObject.localScale += selectedObject.localScale * Input.mouseScrollDelta.y * scrollScale;
+                }
+            }
+        }
+        else if (Input.mouseScrollDelta.magnitude > 0)
+        {
+            initialDistFromCamera += Input.mouseScrollDelta.y * scrollSpeed;
+        }
+
         if (Input.GetMouseButtonUp(0))
         {
             selectedPoint = Vector3.zero;
             selectedNode = null;
-            selectedObject = null;
         }
+    }
 
+    private void FixedUpdate()
+    {
         // Find the force to apply
-        if (Input.GetMouseButton(0) && simulation != null)
+        if (simulation != null)
         {
             currentPos = Camera.main.ScreenToWorldPoint(new Vector3(Input.mousePosition.x, Input.mousePosition.y, initialDistFromCamera));
             if (selectedObject != null)
             {
-                selectedObject.position = currentPos;
+                selectedObject.position = currentPos + initialOffset;
             }
-            else if(selectedPoint != Vector3.zero)
+            else if(selectedPoint != Vector3.zero && Input.GetMouseButton(0))
                 ApplyForcesOverVolume();
         }
     }

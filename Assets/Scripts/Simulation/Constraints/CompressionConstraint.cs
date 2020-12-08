@@ -24,11 +24,16 @@ public class CompressionConstraint : Constraint
 
         if (dist >= material.minDist) return;
         
-        targetSetDist = Mathf.Lerp(targetSetDist, dist, material.pliability);
-        targetSetDist = Mathf.Lerp(targetSetDist, initialDist, material.stiffness);
+        targetSetDist = Mathf.Lerp(targetSetDist, dist, material.compresivePliability);
+        targetSetDist = Mathf.Lerp(targetSetDist, initialDist, material.compresiveStiffness);
 
         Vector3 expectedMove = dir * (targetSetDist - dist);
         n1.correctedDisplacement += expectedMove / n1.nearby.Count * 2;
+    }
+
+    public override void Reset()
+    {
+        targetSetDist = initialDist;
     }
 
     public override void UpdateInitial()

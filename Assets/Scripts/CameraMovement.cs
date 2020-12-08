@@ -16,7 +16,7 @@ public class CameraMovement : MonoBehaviour
         if (Input.GetKey(KeyCode.S)) dir -= transform.forward;
         if (Input.GetKey(KeyCode.D)) dir += transform.right;
         if (Input.GetKey(KeyCode.A)) dir -= transform.right;
-         transform.position += dir.normalized * moveSpeed * Time.deltaTime;
+         transform.position += dir.normalized * moveSpeed * Time.deltaTime * (Input.GetKey(KeyCode.LeftShift) ? 4f : 1f);
 
         if (Input.GetMouseButtonDown(1))
             Cursor.lockState = CursorLockMode.Locked;

@@ -15,6 +15,7 @@ public class Node
     public Vector3 relUp = Vector3.up;
     public Quaternion rotation = Quaternion.identity;
     public Vector3[] nearInitialDirs;
+    public Vector3[] nearTargetDirs;
 
     // Force transfer
     public Vector3 normal = Vector3.zero;

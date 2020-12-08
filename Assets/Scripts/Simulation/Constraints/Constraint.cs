@@ -12,4 +12,5 @@ public abstract class Constraint
     }
     public abstract void ConstrainPositions(float di);
     public abstract void UpdateInitial();
+    public abstract void Reset();
 }

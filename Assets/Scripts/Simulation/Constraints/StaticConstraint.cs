@@ -28,6 +28,11 @@ public class StaticConstraint : Constraint
         bounciness = bounce;
     }
 
+    public override void Reset()
+    {
+
+    }
+
     public override void ConstrainPositions(float di)
     {
         Vector3 normal = Vector3.zero;

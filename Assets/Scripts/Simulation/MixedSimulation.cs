@@ -21,14 +21,16 @@ public class MixedSimulation : MonoBehaviour
     public float mass = 1;
     [Space]
     [Range(0, 1)]
-    [Tooltip("Stiffness")]
-    public float stiffness = .8f;
+    public float compresiveStiffness = .8f;
     [Range(0, 1)]
-    public float pliability = .2f;
+    public float compresivePliability = .2f;
     [Range(0, 1)]
-    public float pliability2 = 10;
+    public float rotationalStiffness = .5f;
+    [Range(0, 1)]
+    public float rotationalPliability = .2f;
     [Range(0,1)]
     public float bounciness = 0f;
+    public bool experimentalRotation = false;
 
     [Header("Simulation Settings")]
     public Vector3 gravity = new Vector3(0, -1, 0);
@@ -202,8 +204,8 @@ public class MixedSimulation : MonoBehaviour
             n.normalCount = 0;
             n.normal = Vector3.zero;
 
-            n.offsetFromGoal = n.initialPredictedPos - n.position;
-            n.offsetFromGoal *= pliability;
+            //n.offsetFromGoal = n.initialPredictedPos - n.position;
+            //n.offsetFromGoal *= pliability;
         }
 
         // Adjust the predicted positions based on constraints
@@ -222,16 +224,22 @@ public class MixedSimulation : MonoBehaviour
             n.velocity += (n.predictedPosition - n.position) / Time.fixedDeltaTime;
             n.position = n.predictedPosition;
             int i = 0;
+            n.correctedRotation = n.rotation;
             foreach (Node near in n.nearby)
             {
-                Vector3 currentDir = near.predictedPosition - n.predictedPosition;
-                Vector3 initialDir = n.rotation * -n.nearInitialDirs[i];
+                Vector3 currentDir = currDir = near.predictedPosition - n.predictedPosition;
+                Vector3 initialDir = initDir = (n.rotation * -n.nearInitialDirs[i]);
                 Quaternion rotate = Quaternion.FromToRotation(initialDir.normalized, currentDir.normalized);
-                n.rotation *= rotate;
+                n.rotation = rotate * n.rotation;
+                //n.correctedRotation = rotate * n.correctedRotation;
                 i++;
             }
+            //n.rotation = n.correctedRotation;
         }
     }
+
+    Vector3 currDir;
+    Vector3 initDir;
 
     public void GenerateExternalConstraints()
     {
@@ -352,11 +360,18 @@ public class MixedSimulation : MonoBehaviour
                 }
             }
         }
+        foreach (Constraint c in internalConstraints)
+        {
+            c.Reset();
+        }
     }
 
     private void OnDrawGizmos()
     {
         if (nodes == null) return;
+        Gizmos.DrawRay(Vector3.zero, currDir);
+        Gizmos.color = Color.blue;
+        Gizmos.DrawRay(Vector3.zero, initDir);
         Gizmos.color = Color.white;
         foreach (Node n in nodes)
         {
@@ -366,6 +381,9 @@ public class MixedSimulation : MonoBehaviour
             }
             if (ShowNodeUps)
             {
+                Gizmos.color = Color.magenta;
+                Gizmos.DrawRay(n.position, n.relUp);//n.rotation * Vector3.up);
+                Gizmos.color = Color.white;
                 Gizmos.DrawRay(n.position, n.rotation * Vector3.up);
             }
         }
