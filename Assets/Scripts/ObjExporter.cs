@@ -9,12 +9,12 @@ public class ObjExporter
 
     public static string MeshToString(MeshFilter mf)
     {
-        Mesh m = mf.mesh;
+        Mesh m = mf.sharedMesh;
         Material[] mats = mf.GetComponent<Renderer>().sharedMaterials;
 
         StringBuilder sb = new StringBuilder();
 
-        sb.Append("g ").Append(mf.name).Append("\n");
+        sb.Append("g ").Append("cube").Append("\n");
         foreach (Vector3 v in m.vertices)
         {
             sb.Append(string.Format("v {0} {1} {2}\n", v.x, v.y, v.z));
